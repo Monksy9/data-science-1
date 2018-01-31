@@ -1,0 +1,229 @@
+---
+title: "Housing Data - Learning Methods"
+author: "Ryan Monks"
+date: "20 January 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# House Prices: Advanced Regression Techniques
+
+This is a dataset found on Kaggle often used to learn new methods and techniques. The data is split into a test and a training set. This Ames dataset was compiled for use in data science education.
+
+
+## Initial Overview of dataset
+There are 80 predictive variables in total and 1460 rows, only factors and integers. There are no numeric variables with decimal places.
+
+
+```{r}
+train <- read.csv("C:/Users/Ryan/Desktop/R folder/House Prices/train.csv")
+test <- read.csv("C:/Users/Ryan/Desktop/R folder/House Prices/test.csv")
+library(ggplot2)
+str(train)
+```
+There are too many columns to review plots inidividually.
+
+## Missing Data
+
+Understanding how many missing values is essential for prediction and for understanding the columns. Let's have a look at the number of missing values.
+
+```{r}
+colSums(sapply(train,is.na))
+```
+There are a significant number of missing values for:
+
+*PoolQC
+*Fence
+*MiscFeature
+*GarageQual
+*GarageCond
+*Alley
+*LotFrontage
+*FireplaceQu
+
+Summary can show us the number of NAS
+```{r}
+summary(train$PoolQC)
+summary(train$Fence)
+```
+
+However, one Kaggle guide has shown a very good method of showing NAs:
+https://www.kaggle.com/notaapple/detailed-exploratory-data-analysis-using-r
+
+```{r}
+plot_Missing <- function(data_in, title = NULL){
+  temp_df <- as.data.frame(ifelse(is.na(data_in), 0, 1))
+  temp_df <- temp_df[,order(colSums(temp_df))]
+  data_temp <- expand.grid(list(x = 1:nrow(temp_df), y = colnames(temp_df)))
+  data_temp$m <- as.vector(as.matrix(temp_df))
+  data_temp <- data.frame(x = unlist(data_temp$x), y = unlist(data_temp$y), m = unlist(data_temp$m))
+  ggplot(data_temp) + geom_tile(aes(x=x, y=y, fill=factor(m))) + scale_fill_manual(values=c("white", "black"), name="Missing\n(0=Yes, 1=No)") + theme_light() + ylab("") + xlab("") + ggtitle(title)
+}
+plot_Missing(train[,colSums(is.na(train)) > 0])
+```
+
+For some reason, the with= parameter is not needed anymore that is in the link. This code is creating a function plot_Missing that has parameter of the dataset, in our case those that are not NA.
+
+Observations:
+* A large proportion of houses miss alleys, pools, fences, fireplaces and elevators. This is consistent with what one may expect.
+* The fireplace and fireplacequ variables could be combined into one.
+
+## Cleaning Data
+One good idea is to convert some character variables to numeric variables to allow for quicker assignment for the model. Initially I started by assigning categorical levels with a high frequency in one bucket into binary indicators.
+
+```{r}
+train$paved[train$Street == "Pave"] <-1 
+train$paved[train$Street != "Pave"] <-0
+table(train$Street)
+
+table(train$LotShape)
+train$regshape[train$LotShape == "Reg"] <-1
+train$regshape[train$LotShape != "Reg"] <-0
+table(train$LotShape)
+
+train$regshape[train$LandContour == "Reg"] <-1
+train$regshape[train$LandContour != "Reg"] <-0
+table(train$LandContour)
+```
+Upon looking at Garagetype as a variable to consider, it became apparent that some are more indicative of value than others as shown below. Therefore it's important to use this information.
+
+```{r echo=FALSE}
+library(knitr)
+library(dplyr)
+kable(summarize(group_by(train,GarageType),mean(SalePrice,na.rm=T)))
+```
+
+The above table shows that BuiltIn and Attached garages correlate to a significantly higher sale value than the other components. Therefore it's appropriate to combine these into one.
+
+```{r}
+
+train$GarageType1[train$GarageType %in% c("Attchd","BuiltIn")] <- 1
+train$GarageType1[!train$GarageType %in% c("Attchd","BuiltIn")] <- 0
+```
+
+Repeating this for GarageFinish and GarageQual, noting that garage quality had a significant deviation between each various level.
+
+```{r}
+train$garagequal[train$GarageQual =="Ex"] <-1
+train$garagequal[train$GarageQual =="Fa"] <-2
+train$garagequal[train$GarageQual =="Gd"] <-3
+train$garagequal[train$GarageQual =="TA"] <-4
+train$garagequal[train$GarageQual == "Po" | is.na(train$GarageQual)] <- 5
+
+train$garagefinish[train$GarageFinish %in% c("Fin", "RFn")] <- 1
+train$garagefinish[!train$GarageFinish %in% c("Fin","RFn")] <- 0
+```
+
+
+
+
+## Correlations
+```{r}
+library(corrplot)
+correlations<-cor(train[,c("SalePrice","OverallQual","OverallCond")])
+corrplot(correlations, method="circle", type="lower",  sig.level = 0.01, insig = "blank")
+```
+
+
+## Plotting data
+TBC
+
+## Estimation methods
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## R Tools learnt along the way:
+
+###Subsetting
+This is the action of subsetting vectors for the desired entries. There are apparantely 5 main ways of doing so:
+
+The method used was using the letters vector
+
+```{r}
+letters
+```
+
+#### Method 1 & 2 By position and by exclusion
+The simplest is to identify by the relative position in the vector
+```{r}
+letters[c(1,13)]
+```
+Note we have to use a column vector as simply writing 1, 13 doesn't make any sense.
+
+```{r}
+letters[-c(1,13)]
+```
+Negative numbers mean extract all but those figures. Note that you cannot mix positive and negative.
+
+Pros:
+Easy 
+
+Cons:
+Must know position of the entry wanted
+
+#### Method 3 - By Name
+
+```{r}
+ip <- c("Ryan"=1,"Monks"=3,"Edward"=5)
+ip[c("Ryan","Edward")]
+```
+
+#### Method 4 - By logicals
+Like the names example, this one is used if the position isn't known but we sort of know what we are looking for.
+
+This method uses the [ ] operator and returns any subset of the vector containing the elements corresponding to TRUE values in our logical 'indexer'.
+
+```{r}
+x = c("a", "b", "c", "b")
+x[c(TRUE, FALSE, TRUE, FALSE)]
+```
+
+This shows that it only pulls out elements 1 and 3 because they are considered true by the indexer.
+
+```{r}
+x = c("a", "b", "c", "b")
+x[x=="b"]
+```
+Or we could find all the positions of the vector
+
+```{r}
+x = c("a", "b", "c", "b")
+x[(1:length(x))[x=="b"]] 
+```
+
+What this does is produces a vector of true false for x=="b" and then that is applied to the vector (1:length(x)). This produces the same results but in a different method, albeit.
+
+Here's another more technical example:
+```{r}
+x = rnorm(100, mean=4, sd=1)
+x[x<1 & x>6] 
+```
+
+We can also use logicals to include or exclude values, using !. This inverts the logical vector.
+```{r}
+x = c("ryan", "edward", "monks")
+x[!(x=="edward")] 
+```
+
+#### Method 5 - The degenerate case
+This is simply doing x[ ] which returns the vector itself. This is useful if we wish to re assign the values of every entry of the vector.
+
+URL found here: https://www.stat.berkeley.edu/~nolan/stat133/Fall05/notes/RSubset.html
